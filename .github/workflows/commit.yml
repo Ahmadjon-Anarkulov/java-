@@ -1,46 +1,62 @@
-name: Aggressive 1000/hour
+name: Safe Aggressive Commits
+
+# Обязательно даём права на запись
+permissions:
+  contents: write
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:          # запуск по кнопке
 
 jobs:
-  spam:
+  commit-burst:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Git
+      - name: Configure Git
         run: |
-          git config --global user.name "YourNameHere"
+          git config --global user.name "Your Name"
           git config --global user.email "yourname@users.noreply.github.com"
 
-      - name: Fast commit burst
+      - name: Burst commits (controlled speed)
         run: |
-          # =================================================
-          TARGET=1000               # сколько хотим
-          BATCH_SIZE=15             # 15 коммитов за один push
-          SLEEP_BETWEEN_PUSH=4      # 4 секунды пауза → ~60–70 push/час
-          # =================================================
+          # --------------------- НАСТРОЙКИ ---------------------
+          TARGET=1000                   # сколько коммитов хотим за запуск
+          COMMITS_PER_PUSH=10           # сколько коммитов в одном git push
+          SLEEP_BETWEEN_PUSHES=6        # пауза в секундах между push (6 сек ≈ 600 коммитов/час)
+          # ------------------------------------------------------
 
           total=0
+          start=$(date +%s)
+
           while [ $total -lt $TARGET ]; do
             remaining=$((TARGET - total))
-            batch=$(( BATCH_SIZE < remaining ? BATCH_SIZE : remaining ))
+            batch=$(( COMMITS_PER_PUSH < remaining ? COMMITS_PER_PUSH : remaining ))
 
             for ((i=1; i<=batch; i++)); do
-              echo "$(date '+%Y-%m-%d %H:%M:%S.%3N') commit $((total + i))" >> burst.log
+              ts=$(date '+%Y-%m-%d %H:%M:%S.%3N')
+              echo "$ts commit $((total + i))" >> commits.log
             done
 
             git add .
             git commit -m "burst $(date '+%H:%M:%S')" --allow-empty || true
-            git push origin HEAD || { sleep 20; git push origin HEAD; }
+
+            git push origin HEAD || {
+              echo "Push failed, waiting extra..."
+              sleep 30
+              git push origin HEAD || exit 1
+            }
 
             total=$((total + batch))
-            echo "Progress: $total / $TARGET"
+            now=$(date +%s)
+            elapsed=$((now - start))
+            echo "Progress: $total / $TARGET | ~$((elapsed / 60)) min"
 
-            sleep $SLEEP_BETWEEN_PUSH
+            sleep $SLEEP_BETWEEN_PUSHES
           done
 
-          echo "Finished. Total committed: $total"
+          echo "Completed. Total: $total commits"
+          echo "Time taken: $(( (now - start) / 60 )) minutes"
