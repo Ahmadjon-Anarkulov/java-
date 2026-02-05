@@ -1,0 +1,46 @@
+name: Aggressive 1000/hour
+
+on:
+  workflow_dispatch:
+
+jobs:
+  spam:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "YourNameHere"
+          git config --global user.email "yourname@users.noreply.github.com"
+
+      - name: Fast commit burst
+        run: |
+          # =================================================
+          TARGET=1000               # сколько хотим
+          BATCH_SIZE=15             # 15 коммитов за один push
+          SLEEP_BETWEEN_PUSH=4      # 4 секунды пауза → ~60–70 push/час
+          # =================================================
+
+          total=0
+          while [ $total -lt $TARGET ]; do
+            remaining=$((TARGET - total))
+            batch=$(( BATCH_SIZE < remaining ? BATCH_SIZE : remaining ))
+
+            for ((i=1; i<=batch; i++)); do
+              echo "$(date '+%Y-%m-%d %H:%M:%S.%3N') commit $((total + i))" >> burst.log
+            done
+
+            git add .
+            git commit -m "burst $(date '+%H:%M:%S')" --allow-empty || true
+            git push origin HEAD || { sleep 20; git push origin HEAD; }
+
+            total=$((total + batch))
+            echo "Progress: $total / $TARGET"
+
+            sleep $SLEEP_BETWEEN_PUSH
+          done
+
+          echo "Finished. Total committed: $total"
